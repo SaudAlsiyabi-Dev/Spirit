@@ -63,6 +63,31 @@ function art(name: string): HTMLImageElement {
 const painted = (img: HTMLImageElement) => img.complete && img.naturalWidth > 0
 
 /**
+ * The sky, covering the screen once and never repeating.
+ *
+ * The other layers tile, but the sky cannot: it holds a moon, and a tiled moon
+ * comes out as a row of them. So it is scaled to cover and then panned within
+ * whatever slack that leaves, clamped at both ends. The drift is slight, which
+ * suits the furthest layer anyway — a sky is the one thing that should barely
+ * move.
+ */
+function cover(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  shiftX: number,
+  w: number,
+  h: number,
+): void {
+  // Over-scaled a little past the viewport, so there is slack to pan through.
+  const scale = Math.max(w / img.naturalWidth, h / img.naturalHeight) * 1.18
+  const width = img.naturalWidth * scale
+  const height = img.naturalHeight * scale
+  const slack = Math.max(0, width - w)
+  const x = -slack / 2 - Math.max(-slack / 2, Math.min(slack / 2, shiftX))
+  ctx.drawImage(img, x, h - height, width, height)
+}
+
+/**
  * A background band repeating across the screen, every other copy mirrored.
  *
  * Mirroring lets a painting that was never made to tile repeat without a seam:
@@ -355,7 +380,7 @@ export default function Game({
 
       const skyArt = art('sky')
       if (painted(skyArt)) {
-        band(ctx!, skyArt, camera.x * tile * 0.06, h, h, w)
+        cover(ctx!, skyArt, camera.x * tile * 0.06, w, h)
       } else {
         const sky = ctx!.createLinearGradient(0, 0, 0, h)
         sky.addColorStop(0, '#0a1020')
@@ -399,6 +424,18 @@ export default function Game({
           for (let tx = x; tx < x + lw; tx += size) {
             for (let ty = y; ty < h; ty += size) ctx!.drawImage(body, tx, ty, size, size)
           }
+          /*
+           * Sunk into silhouette below the lip. A ledge can stand many tiles
+           * tall, and carrying a lit rock texture all the way down turns it
+           * into a wall that hides the forest the whole scene is built on. The
+           * light comes from the moss along the top, so only the top has any
+           * business being lit.
+           */
+          const sink = ctx!.createLinearGradient(0, y, 0, y + tile * 3)
+          sink.addColorStop(0, 'rgba(6, 13, 20, 0)')
+          sink.addColorStop(1, 'rgba(6, 13, 20, 1)')
+          ctx!.fillStyle = sink
+          ctx!.fillRect(x, y, lw, h - y)
           ctx!.restore()
         } else {
           ctx!.fillStyle = '#060d14'
