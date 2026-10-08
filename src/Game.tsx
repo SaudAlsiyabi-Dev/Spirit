@@ -147,6 +147,23 @@ export default function Game({
   const [lamp, setLamp] = useState(1)
   const [lit, setLit] = useState(0)
   const [reach, setReach] = useState(0)
+  const [fps, setFps] = useState(0)
+  const [showFps, setShowFps] = useState(false)
+
+  /*
+   * F3 shows the frame rate. A game that claims sixty should be checkable on
+   * the machine where that matters, rather than taken on trust from whatever
+   * the author's hardware managed.
+   */
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'F3') return
+      e.preventDefault()
+      setShowFps((on) => !on)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   const canvas = useRef<HTMLCanvasElement | null>(null)
   const pausedRef = useRef(paused)
@@ -166,6 +183,8 @@ export default function Game({
     let frame = 0
     let last = 0
     let banked = 0
+    let fpsFrames = 0
+    let fpsSince = 0
 
     const level: Level = generateLevel(seed)
     const scenery = makeScenery(seed, level.length)
@@ -750,9 +769,9 @@ export default function Game({
      * same input produces the same run on any machine, which also leaves the
      * door open to two people running the same seed.
      *
-     * Drawing only when a step has happened is what caps the frame rate: on a
-     * faster display the extra callbacks bank time and return without
-     * rendering, instead of burning a GPU on frames showing the same thing.
+     * Drawing is not capped: every callback the display gives us is drawn, so
+     * a faster screen gets every frame it can show. Only the simulation is
+     * fixed; the picture is as smooth as the machine allows.
      */
     function loop(now: number) {
       if (stopped) return
@@ -764,15 +783,24 @@ export default function Game({
       // rather than paid back as a burst of catch-up steps.
       banked = Math.min(banked + elapsed, MAX_CATCH_UP)
 
-      let stepped = false
       while (banked >= STEP) {
         // Paused still ticks the clock and still draws, so the scene sits
         // behind the menu rather than freezing to black; it just does not move.
         if (!pausedRef.current) step(STEP)
         banked -= STEP
-        stepped = true
       }
-      if (stepped) draw(now)
+      draw(now)
+
+      /*
+       * Averaged over a second rather than taken from the last frame, which
+       * swings far too much to read while something is moving.
+       */
+      fpsFrames += 1
+      if (now - fpsSince >= 1000) {
+        setFps(Math.round((fpsFrames * 1000) / (now - fpsSince)))
+        fpsFrames = 0
+        fpsSince = now
+      }
     }
 
     const unlisten = listen()
@@ -796,6 +824,7 @@ export default function Game({
         <span className="reach">{reach}%</span>
         <span className="embers">{embers} ✦</span>
         <span className="lit">{lit} ▲</span>
+        {showFps && <span className="fps">{fps} fps</span>}
         <span className={lamp <= LAMP_LOW ? 'lamp low' : 'lamp'}>
           <i style={{ width: `${Math.round(lamp * 100)}%` }} />
         </span>

@@ -61,6 +61,11 @@ body {
   color: #ffe4a3;
 }
 
+.hud .fps {
+  color: #9fb6c9;
+  font-variant-numeric: tabular-nums;
+}
+
 .hud .lit {
   color: #a6ffd8;
 }
