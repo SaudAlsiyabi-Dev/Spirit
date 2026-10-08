@@ -26,16 +26,21 @@ HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RAW = os.path.join(HERE, "public", "game", "raw")
 OUT = os.path.join(HERE, "public", "game")
 
-# name -> (key the background out?, crop band as (top, bottom) in 0..1, final width)
+# name -> (key the background out?, crop as (top, bottom) or (top, bottom, left, right)
+#          in 0..1, final width)
 PLAN = {
     "sky":          (False, None,         1536),
     "hills-far":    (True,  None,         1536),
     "forest-mid":   (True,  None,         1536),
     "fronds-near":  (True,  None,         1536),
     "ledge-body":   (False, None,         512),
-    # Generated as a full landscape picture with the moss across the middle;
-    # only that band is wanted.
-    "ledge-top":    (True,  (0.34, 0.70), 512),
+    # Generated as a whole slab sitting in the middle of the frame: moss along
+    # the top, rock under it, vines trailing off the underside. The vertical
+    # crop keeps all three and drops the empty sky and the dead space below the
+    # longest vine. The horizontal crop throws away the rounded ends, which are
+    # where the slab stops being a slab — tile those and you get a row of bumps
+    # instead of a ledge.
+    "ledge-top":    (True,  (0.17, 0.92, 0.10, 0.90), 512),
     "spirit-idle":  (True,  None,         384),
     "spirit-run":   (True,  None,         384),
     "spirit-jump":  (True,  None,         384),
@@ -188,7 +193,9 @@ def main():
         if band:
             top = int(img.height * band[0])
             bottom = int(img.height * band[1])
-            img = img.crop((0, top, img.width, bottom))
+            left = int(img.width * band[2]) if len(band) > 2 else 0
+            right = int(img.width * band[3]) if len(band) > 3 else img.width
+            img = img.crop((left, top, right, bottom))
 
         if needs_key:
             img = key_magenta(img)

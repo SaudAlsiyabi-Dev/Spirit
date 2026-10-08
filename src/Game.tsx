@@ -444,14 +444,30 @@ export default function Game({
 
         const lip = art('ledge-top')
         if (painted(lip)) {
-          const lipH = tile * 0.9
+          /*
+           * The lip is a whole slab edge — moss on top, rock beneath it, vines
+           * trailing off the underside — not a thin strip, so it hangs well
+           * below the platform line. The surface the player stands on sits a
+           * little way down the picture rather than at its top, hence the
+           * offset: line up the moss, not the bounding box.
+           *
+           * Copies alternate mirrored, as the background bands do, because the
+           * two cut edges of a crop never meet but an edge always meets itself.
+           */
+          const lipH = tile * 2.6
           const lipW = lipH * (lip.naturalWidth / lip.naturalHeight)
+          const top = y - lipH * 0.14
           ctx!.save()
           ctx!.beginPath()
-          ctx!.rect(x - 1, y - lipH * 0.6, lw + 2, lipH * 1.2)
+          ctx!.rect(x - 1, y - lipH * 0.4, lw + 2, lipH * 1.6)
           ctx!.clip()
-          for (let tx = x; tx < x + lw; tx += lipW) {
-            ctx!.drawImage(lip, tx, y - lipH * 0.45, lipW, lipH)
+          for (let tx = x; tx < x + lw; tx += lipW * 2) {
+            ctx!.drawImage(lip, tx, top, lipW, lipH)
+            ctx!.save()
+            ctx!.translate(tx + lipW * 2, 0)
+            ctx!.scale(-1, 1)
+            ctx!.drawImage(lip, 0, top, lipW, lipH)
+            ctx!.restore()
           }
           ctx!.restore()
         } else {
