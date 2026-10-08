@@ -16,10 +16,16 @@ import {
   RUN,
   RUN_ACCEL,
   RUN_BRAKE,
+  EMBER_GIVES,
+  FALLING_TAKES,
+  GLOOM_TAKES,
+  LAMP_FULL,
+  LAMP_LOW,
   generateLevel,
   groundUnder,
   rng,
-  touchingThorn,
+  touchingGloom,
+  wickInReach,
   type Level,
 } from './level'
 import { listen, read, rumble } from './input'
@@ -40,11 +46,10 @@ import { listen, read, rumble } from './input'
 
 /** Tiles across the window. A wide screen earns a wider view than a phone did. */
 const VIEW = 26
-const LIVES = 3
 const TRAIL = 110
 const SPARKS = 150
 
-export type Outcome = { won: boolean; motes: number; reach: number; score: number }
+export type Outcome = { won: boolean; embers: number; lit: number; reach: number; score: number }
 
 type Particle = { x: number; y: number; vx: number; vy: number; life: number; max: number; hue: number }
 
@@ -126,8 +131,9 @@ export default function Game({
   paused: boolean
   onEnd: (outcome: Outcome) => void
 }) {
-  const [motes, setMotes] = useState(0)
-  const [lives, setLives] = useState(LIVES)
+  const [embers, setEmbers] = useState(0)
+  const [lamp, setLamp] = useState(1)
+  const [lit, setLit] = useState(0)
   const [reach, setReach] = useState(0)
 
   const canvas = useRef<HTMLCanvasElement | null>(null)
@@ -164,9 +170,28 @@ export default function Game({
     let holding = false
     let dashing = 0
     let dashReady = 0
-    let life = LIVES
+    let lampLeft = LAMP_FULL
+    let kindled = 0
+    /*
+     * How far the world has been woken. Everything past it is drawn unlit —
+     * the paintings are all made in their lit colour, and the dark is put back
+     * here rather than painted a second time.
+     */
+    let litTo = level.start.x + 6
     let collected = 0
+    /*
+     * You come back to the last stone you lit, and to nowhere else.
+     *
+     * This used to follow you along every ledge you touched, which was fine
+     * when a mistake cost one of three lives and fatal once it cost light: a
+     * pool of gloom sets the checkpoint beside itself, so you respawn in reach
+     * of the thing that just hurt you, with the key still held, and the lamp
+     * empties in four bounces with no way out. Wick-stones can never stand in
+     * gloom, so coming back to one is always somewhere survivable.
+     */
     let checkpoint = { x: level.start.x, y: level.start.y }
+    /** Briefly untouchable after coming back, so a respawn cannot chain. */
+    let grace = 0
     let dead = 0
     let over = false
     let best = 0
@@ -197,23 +222,31 @@ export default function Game({
       }
     }
 
-    function die() {
+    /*
+     * Everything that goes wrong costs light, and nothing else. Lives are gone:
+     * a run ends when the lamp does, so a mistake is never a discrete life lost
+     * but a bite out of the time you have left — which means a careful player
+     * and a lucky one are rewarded in the same currency.
+     */
+    function douse(cost: number) {
       if (dead > 0 || over) return
-      life -= 1
-      setLives(life)
+      lampLeft -= cost
       dead = 0.8
       shake = 1
       rumble(0.7, 180)
       burst(px, py, 30, 32, 7, 0.6)
-      if (life <= 0) {
+      if (lampLeft <= 0) {
+        lampLeft = 0
         over = true
         onEndRef.current({
           won: false,
-          motes: collected,
+          embers: collected,
+          lit: kindled,
           reach: Math.round((Math.min(best, level.length) / level.length) * 100),
-          score: score(collected, best, false),
+          score: score(collected, kindled, best, false),
         })
       }
+      setLamp(Math.max(0, lampLeft / LAMP_FULL))
     }
 
     function step(dt: number) {
@@ -228,6 +261,7 @@ export default function Game({
           vx = 0
           vy = 0
           dashing = 0
+          grace = 0.6
           camera.x = px
           camera.y = py
         }
@@ -301,7 +335,6 @@ export default function Game({
         grounded = true
         coyote = COYOTE
         jumpsLeft = 1
-        checkpoint = { x: Math.max(ledge.x + 1, Math.min(px, ledge.x + ledge.w - 1)), y: ledge.y }
       } else {
         if (grounded) coyote = COYOTE
         grounded = false
@@ -312,26 +345,49 @@ export default function Game({
         vx = 0
       }
 
-      if (py > FLOOR + 3 || touchingThorn(level, px, py)) die()
+      grace = Math.max(0, grace - dt)
+      if (py > FLOOR + 3) douse(FALLING_TAKES)
+      else if (grace <= 0 && touchingGloom(level, px, py)) douse(GLOOM_TAKES)
+      if (dead > 0 || over) return
 
-      for (const mote of level.motes) {
-        if (mote.taken) continue
-        if (Math.hypot(mote.x - px, mote.y - py) > 0.9) continue
-        mote.taken = true
+      // The lamp burns whether or not you are going anywhere.
+      lampLeft -= dt
+      if (lampLeft <= 0) douse(0)
+      setLamp(Math.max(0, lampLeft / LAMP_FULL))
+
+      for (const ember of level.embers) {
+        if (ember.taken) continue
+        if (Math.hypot(ember.x - px, ember.y - py) > 0.9) continue
+        ember.taken = true
         collected += 1
-        setMotes(collected)
+        lampLeft = Math.min(LAMP_FULL, lampLeft + EMBER_GIVES)
+        setEmbers(collected)
+        setLamp(lampLeft / LAMP_FULL)
         rumble(0.25, 60)
-        burst(mote.x, mote.y, 14, 48, 4.5, 0.45)
+        burst(ember.x, ember.y, 14, 48, 4.5, 0.45)
       }
 
-      if (!over && px >= level.goal.x) {
-        over = true
-        onEndRef.current({
-          won: true,
-          motes: collected,
-          reach: 100,
-          score: score(collected, level.length, true),
-        })
+      const wick = wickInReach(level, px, py)
+      if (wick) {
+        wick.lit = true
+        kindled += 1
+        lampLeft = LAMP_FULL
+        litTo = Math.max(litTo, wick.x + 16)
+        checkpoint = { x: wick.x, y: wick.y }
+        setLit(kindled)
+        setLamp(1)
+        rumble(0.6, 220)
+        burst(wick.x, wick.y - 1.6, 34, 40, 6, 0.8)
+        if (kindled >= level.wicks.length) {
+          over = true
+          onEndRef.current({
+            won: true,
+            embers: collected,
+            lit: kindled,
+            reach: 100,
+            score: score(collected, kindled, level.length, true),
+          })
+        }
       }
 
       best = Math.max(best, px)
@@ -480,64 +536,120 @@ export default function Game({
         }
       }
 
-      for (const thorn of level.thorns) {
-        if (thorn.x + thorn.w < leftTile || thorn.x > rightTile) continue
-        const x = ox + thorn.x * tile
-        const y = oy + thorn.y * tile
-        const img = art('thorn')
+      for (const pool of level.gloom) {
+        if (pool.x + pool.w < leftTile || pool.x > rightTile) continue
+        const x = ox + pool.x * tile
+        const y = oy + pool.y * tile
+        const pw = pool.w * tile
+        const img = art('gloom')
         if (painted(img)) {
-          const tw = thorn.w * tile * 1.1
-          const th = tw * (img.naturalHeight / img.naturalWidth)
-          ctx!.drawImage(img, x, y - th, tw, th)
+          const ph = pw * (img.naturalHeight / img.naturalWidth)
+          ctx!.drawImage(img, x, y - ph, pw, ph)
         } else {
-          glow(ctx!, x + (thorn.w * tile) / 2, y, tile * 0.9, '255, 160, 60', 0.34)
-          ctx!.fillStyle = '#ffb347'
-          for (let i = 0; i < 3; i++) {
-            const sx = x + (thorn.w * tile * (i + 0.5)) / 3
+          /*
+           * A hole rather than a shadow, so it is drawn as flat black with only
+           * a thin sick rim of light on its surface — the one thing in the
+           * world that does not glow.
+           */
+          const lip = tile * 0.1 * (1 + Math.sin(now / 340 + pool.x) * 0.3)
+          ctx!.fillStyle = '#01030a'
+          ctx!.fillRect(x, y - tile * 0.34, pw, tile * 0.34)
+          ctx!.fillStyle = 'rgba(150, 220, 170, 0.5)'
+          ctx!.fillRect(x, y - tile * 0.34 - lip * 0.4, pw, Math.max(1, lip * 0.4))
+        }
+      }
+
+      for (const ember of level.embers) {
+        if (ember.taken) continue
+        if (ember.x < leftTile || ember.x > rightTile) continue
+        const x = ox + ember.x * tile
+        const y = oy + (ember.y + Math.sin(now / 520 + ember.id) * 0.12) * tile
+        const img = art('ember')
+        glow(ctx!, x, y, tile * 1.1, '255, 186, 90', 0.5)
+        if (painted(img)) {
+          const s = tile * 0.7
+          ctx!.drawImage(img, x - s / 2, y - s / 2, s, s)
+        } else {
+          ctx!.fillStyle = '#ffd089'
+          ctx!.beginPath()
+          ctx!.arc(x, y, tile * 0.12, 0, Math.PI * 2)
+          ctx!.fill()
+        }
+      }
+
+      for (const wick of level.wicks) {
+        if (wick.x < leftTile - 6 || wick.x > rightTile + 6) continue
+        const x = ox + wick.x * tile
+        const y = oy + wick.y * tile
+        const img = art(wick.lit ? 'wick-stone-lit' : 'wick-stone-dark')
+        if (wick.lit) {
+          glow(ctx!, x, y - tile * 2.6, tile * 4 * (1 + Math.sin(now / 600) * 0.06), '255, 180, 90', 0.5)
+        }
+        if (painted(img)) {
+          const sh = tile * 4.2
+          const sw = sh * (img.naturalWidth / img.naturalHeight)
+          ctx!.drawImage(img, x - sw / 2, y - sh, sw, sh)
+        } else {
+          // A post with a bowl, and fire in the bowl once it is lit.
+          ctx!.fillStyle = wick.lit ? '#41525e' : '#1b2630'
+          ctx!.beginPath()
+          ctx!.moveTo(x - tile * 0.26, y)
+          ctx!.lineTo(x - tile * 0.17, y - tile * 2.3)
+          ctx!.lineTo(x + tile * 0.17, y - tile * 2.3)
+          ctx!.lineTo(x + tile * 0.26, y)
+          ctx!.closePath()
+          ctx!.fill()
+          ctx!.fillRect(x - tile * 0.42, y - tile * 2.6, tile * 0.84, tile * 0.3)
+          if (wick.lit) {
+            const f = 1 + Math.sin(now / 150 + wick.id) * 0.12
+            const fire = ctx!.createLinearGradient(0, y - tile * 2.6, 0, y - tile * (2.6 + 1.5 * f))
+            fire.addColorStop(0, 'rgba(255, 140, 40, 0.95)')
+            fire.addColorStop(1, 'rgba(255, 240, 180, 0)')
+            ctx!.fillStyle = fire
             ctx!.beginPath()
-            ctx!.moveTo(sx - tile * 0.12, y)
-            ctx!.lineTo(sx, y - tile * 0.5)
-            ctx!.lineTo(sx + tile * 0.12, y)
+            ctx!.moveTo(x - tile * 0.3, y - tile * 2.6)
+            ctx!.lineTo(x, y - tile * (2.6 + 1.5 * f))
+            ctx!.lineTo(x + tile * 0.3, y - tile * 2.6)
             ctx!.closePath()
             ctx!.fill()
           }
         }
       }
 
-      for (const mote of level.motes) {
-        if (mote.taken) continue
-        if (mote.x < leftTile || mote.x > rightTile) continue
-        const x = ox + mote.x * tile
-        const y = oy + (mote.y + Math.sin(now / 520 + mote.id) * 0.12) * tile
-        const img = art('mote')
-        glow(ctx!, x, y, tile * 1.2, '255, 214, 120', 0.55)
-        if (painted(img)) {
-          const s = tile * 0.8
-          ctx!.drawImage(img, x - s / 2, y - s / 2, s, s)
-        } else {
-          ctx!.fillStyle = '#fff2c8'
-          ctx!.beginPath()
-          ctx!.arc(x, y, tile * 0.13, 0, Math.PI * 2)
-          ctx!.fill()
-        }
+      /*
+       * The dark, put back.
+       *
+       * Every painting in this game is made in its kindled colour and drawn
+       * once. What has not been woken yet is covered here instead, which is
+       * why there is no second set of unlit art to disagree with the first —
+       * and why the frontier can move while you watch.
+       *
+       * Both of these are gradient fills straight onto the target. An offscreen
+       * layer composited over the screen would be the one thing this renderer
+       * cannot afford.
+       */
+      const frontier = ox + litTo * tile
+      if (frontier < w) {
+        const edge = Math.max(0, frontier - tile * 7)
+        const veil = ctx!.createLinearGradient(edge, 0, frontier + tile * 11, 0)
+        veil.addColorStop(0, 'rgba(2, 5, 12, 0)')
+        veil.addColorStop(1, 'rgba(2, 5, 12, 0.82)')
+        ctx!.fillStyle = veil
+        ctx!.fillRect(edge, 0, w - edge, h)
       }
 
-      if (level.goal.x > leftTile - 6 && level.goal.x < rightTile + 6) {
-        const x = ox + level.goal.x * tile
-        const y = oy + level.goal.y * tile
-        const img = art('goal')
-        glow(ctx!, x, y, tile * 4 * (1 + Math.sin(now / 600) * 0.05), '150, 255, 230', 0.4)
-        if (painted(img)) {
-          const gh = tile * 7
-          const gw = gh * (img.naturalWidth / img.naturalHeight)
-          ctx!.drawImage(img, x - gw / 2, y + tile * 0.6 - gh, gw, gh)
-        } else {
-          ctx!.strokeStyle = 'rgba(190, 255, 240, 0.9)'
-          ctx!.lineWidth = tile * 0.06
-          ctx!.beginPath()
-          ctx!.arc(x, y, tile * 0.7, 0, Math.PI * 2)
-          ctx!.stroke()
-        }
+      // As the lamp empties the world closes in, so running low is something
+      // you see rather than something you have to read off the HUD.
+      const fuel = Math.max(0, lampLeft / LAMP_FULL)
+      if (fuel < 0.8 && dead <= 0) {
+        const cx = ox + px * tile
+        const cy = oy + py * tile
+        const r = tile * (5 + fuel * 30)
+        const close = ctx!.createRadialGradient(cx, cy, r * 0.3, cx, cy, r)
+        close.addColorStop(0, 'rgba(1, 3, 9, 0)')
+        close.addColorStop(1, `rgba(1, 3, 9, ${(0.9 - fuel * 0.55).toFixed(3)})`)
+        ctx!.fillStyle = close
+        ctx!.fillRect(0, 0, w, h)
       }
 
       ctx!.globalCompositeOperation = 'lighter'
@@ -629,18 +741,18 @@ export default function Game({
       <canvas ref={canvas} className="board" />
       <div className="hud">
         <span className="reach">{reach}%</span>
-        <span className="motes">{motes} ✦</span>
-        <span className="lives">
-          {'♥'.repeat(Math.max(0, lives))}
-          <span className="spent">{'♥'.repeat(Math.max(0, LIVES - lives))}</span>
+        <span className="embers">{embers} ✦</span>
+        <span className="lit">{lit} ▲</span>
+        <span className={lamp <= LAMP_LOW ? 'lamp low' : 'lamp'}>
+          <i style={{ width: `${Math.round(lamp * 100)}%` }} />
         </span>
       </div>
     </>
   )
 }
 
-function score(motes: number, reached: number, finished: boolean): number {
-  return motes * 10 + Math.round(reached / 4) + (finished ? 150 : 0)
+function score(embers: number, lit: number, reached: number, finished: boolean): number {
+  return embers * 10 + lit * 40 + Math.round(reached / 4) + (finished ? 150 : 0)
 }
 
 function glow(

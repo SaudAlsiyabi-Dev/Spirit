@@ -19,18 +19,23 @@ export type Point = { x: number; y: number }
 /** A ledge to stand on. Solid on top, passed through from below. */
 export type Ledge = { x: number; y: number; w: number }
 
-export type Mote = { id: number; x: number; y: number; taken: boolean }
-export type Thorn = { x: number; y: number; w: number }
+/** Fuel. Burns in the lamp, and is the only thing that does. */
+export type Ember = { id: number; x: number; y: number; taken: boolean }
+
+/** Pooled dark lying on a ledge. Touching it costs light, not a life. */
+export type Gloom = { x: number; y: number; w: number }
+
+/** A standing lantern. Dead until kindled; the last one ends the level. */
+export type Wick = { id: number; x: number; y: number; lit: boolean }
 
 export type Level = {
   /** How far the level runs, in tiles. */
   length: number
   ledges: Ledge[]
-  motes: Mote[]
-  thorns: Thorn[]
+  embers: Ember[]
+  gloom: Gloom[]
+  wicks: Wick[]
   start: Point
-  /** Where the level is won. */
-  goal: Point
   seed: number
 }
 
@@ -84,14 +89,47 @@ export const MAX_GAP = RUN * ((2 * JUMP) / GRAVITY)
 const SAFE_RISE = MAX_RISE * 0.52
 const SAFE_GAP = MAX_GAP * 0.46
 
-/** The floor of the world: fall past this and the run is over. */
+/** The floor of the world: fall past this and you are back at the last wick. */
 export const FLOOR = 19
+
+/* ---- The lamp ------------------------------------------------------------
+ *
+ * Light is the whole game, so it is measured in the only unit that matters to
+ * the player: seconds of it left. Everything that costs or gives light is
+ * written below in those same seconds, which makes the balance legible —
+ * an ember is four seconds, falling costs six, and a mouthful of gloom costs
+ * nine, so the dark is twice the mistake that missing a jump is.
+ */
+
+/** A full lamp, in seconds. */
+export const LAMP_FULL = 26
+export const EMBER_GIVES = 4
+export const GLOOM_TAKES = 9
+export const FALLING_TAKES = 6
+/** Below this fraction the lamp guts, the world closes in, and it shows. */
+export const LAMP_LOW = 0.3
+
+/** Roughly how far apart the wick-stones stand, in tiles. */
+const WICK_SPACING = 46
+
+/**
+ * The widest pool of gloom, and the clear ledge left either side of one.
+ *
+ * A standing jump carries MAX_GAP at a run, but you do not get a run-up to a
+ * pool lying on the ledge you are already standing on, so the pool is held to
+ * well under half of it and given shore on both sides to leave from and land
+ * on.
+ */
+const FIRST_WICK = 16
+const MAX_POOL = 2.2
+const SHORE = 1.6
 
 export function generateLevel(seed: number, length = 230): Level {
   const random = rng(seed)
   const ledges: Ledge[] = []
-  const motes: Mote[] = []
-  const thorns: Thorn[] = []
+  const embers: Ember[] = []
+  const gloom: Gloom[] = []
+  const wicks: Wick[] = []
 
   // Opening ground, wide and flat, so nobody dies before they have moved.
   let x = 0
@@ -99,7 +137,15 @@ export function generateLevel(seed: number, length = 230): Level {
   ledges.push({ x: -4, y, w: 16 })
   x = 12
 
-  let moteId = 0
+  let emberId = 0
+  let wickId = 0
+  /*
+   * The first stone stands early, not a full spacing in. Coming back means
+   * coming back to the last stone you lit, so until there is one, every
+   * mistake costs the whole opening — which is a cruel way to teach someone
+   * what the stones are for.
+   */
+  let nextWick = FIRST_WICK
   while (x < length) {
     const gap = 1.6 + random() * (SAFE_GAP - 1.6)
     // Rise is the limit that matters; dropping is free, so falls can be deeper.
@@ -113,26 +159,65 @@ export function generateLevel(seed: number, length = 230): Level {
 
     ledges.push({ x: x + gap, y, w })
 
-    // A mote over the gap, which is what pulls you into making the jump.
+    // An ember over the gap, which is what pulls you into making the jump.
     if (random() < 0.72) {
-      motes.push({ id: moteId++, x: x + gap * 0.5, y: y - 1.4 - random() * 1.6, taken: false })
+      embers.push({ id: emberId++, x: x + gap * 0.5, y: y - 1.4 - random() * 1.6, taken: false })
     }
-    // Thorns only on ledges long enough to land beside them.
-    if (w > 5.5 && random() < 0.4) {
-      thorns.push({ x: x + gap + w * 0.45, y, w: 1.2 })
+
+    /*
+     * A wick-stone whenever one is due and there is room to stand beside it.
+     * It takes the whole ledge: a stone you have to thread past gloom to reach
+     * would be a trap, and the stones are the one place the run lets go.
+     */
+    if (x >= nextWick && w > 5) {
+      wicks.push({ id: wickId++, x: x + gap + w * 0.5, y, lit: false })
+      nextWick = x + WICK_SPACING
+    } else if (w > 5.5 && random() < 0.4) {
+      /*
+       * Gloom pools, so it lies along the ledge rather than standing on it —
+       * but never wider than a jump started from a standstill beside it, and
+       * never without clear ledge to leave from and land on. A pool you cannot
+       * get over is not a hazard, it is the end of the level.
+       */
+      const pool = Math.min(MAX_POOL, w - SHORE * 2)
+      if (pool > 0.6) {
+        const room = w - pool - SHORE * 2
+        gloom.push({ x: x + gap + SHORE + random() * room, y, w: pool })
+      }
     }
 
     x += gap + w
   }
 
+  /*
+   * The last stone is the end of the level, so it is placed rather than left to
+   * the spacing — otherwise a level could run out mid-stride with nothing to
+   * light, and there would be no way to finish it.
+   */
   const last = ledges[ledges.length - 1]
+  const end = { x: last.x + last.w * 0.5, y: last.y }
+  if (wicks.length === 0 || end.x - wicks[wicks.length - 1].x > 8) {
+    wicks.push({ id: wickId++, x: end.x, y: end.y, lit: false })
+  } else {
+    wicks[wicks.length - 1] = { ...wicks[wicks.length - 1], ...end }
+  }
+
+  // The end stone lands on a ledge chosen before it, which may already have a
+  // pool on it. Nothing stands between the player and the last light.
+  const endWick = wicks[wicks.length - 1]
+  for (let i = gloom.length - 1; i >= 0; i--) {
+    if (Math.abs(gloom[i].y - endWick.y) < 0.01 && gloom[i].x + gloom[i].w > endWick.x - 3) {
+      gloom.splice(i, 1)
+    }
+  }
+
   return {
     length: x,
     ledges,
-    motes,
-    thorns,
+    embers,
+    gloom,
+    wicks,
     start: { x: 2, y: 11 },
-    goal: { x: last.x + last.w * 0.5, y: last.y - 1 },
     seed,
   }
 }
@@ -179,10 +264,19 @@ export function onLedge(level: Level, x: number, y: number): Ledge | null {
   return null
 }
 
-export function touchingThorn(level: Level, x: number, y: number): boolean {
-  for (const thorn of level.thorns) {
-    if (x + HALF_W < thorn.x || x - HALF_W > thorn.x + thorn.w) continue
-    if (Math.abs(y + HALF_H - thorn.y) < 0.5) return true
+export function touchingGloom(level: Level, x: number, y: number): boolean {
+  for (const pool of level.gloom) {
+    if (x + HALF_W < pool.x || x - HALF_W > pool.x + pool.w) continue
+    if (Math.abs(y + HALF_H - pool.y) < 0.5) return true
   }
   return false
+}
+
+/** The unlit wick-stone close enough to kindle, if there is one. */
+export function wickInReach(level: Level, x: number, y: number): Wick | null {
+  for (const wick of level.wicks) {
+    if (wick.lit) continue
+    if (Math.abs(wick.x - x) < 1.4 && Math.abs(wick.y - y) < 2.5) return wick
+  }
+  return null
 }

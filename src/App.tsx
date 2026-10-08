@@ -13,7 +13,7 @@ import { newSeed } from './level'
 
 type Screen = 'title' | 'playing' | 'paused' | 'over'
 
-const BEST = 'glow-best'
+const BEST = 'emberwake-best'
 
 function readBest(): number {
   try {
@@ -92,8 +92,8 @@ export default function App() {
 
       {screen === 'title' && (
         <div className="screen title">
-          <h1>Glow</h1>
-          <p className="sub">Run the forest. Gather the lights. Find the way through.</p>
+          <h1>Emberwake</h1>
+          <p className="sub">Your lamp is going out. Kindle the stones before it does.</p>
           <button className="primary" onClick={start} autoFocus>
             Begin
           </button>
@@ -123,9 +123,10 @@ export default function App() {
 
       {screen === 'over' && outcome && (
         <div className="screen veil">
-          <h2>{outcome.won ? 'Through the forest' : 'The dark took you'}</h2>
+          <h2>{outcome.won ? 'Every stone alight' : 'The dark took you'}</h2>
           <p className="sub">
-            {outcome.reach}% of the way · {outcome.motes} lights · {outcome.score} points
+            {outcome.reach}% of the way · {outcome.lit} kindled · {outcome.embers} embers ·{' '}
+            {outcome.score} points
           </p>
           {outcome.score >= best && outcome.score > 0 && <p className="best">A new best.</p>}
           <button className="primary" onClick={start} autoFocus>
@@ -146,9 +147,11 @@ function Controls({ pad }: { pad: boolean }) {
       <dt>Move</dt>
       <dd>{pad ? 'Stick / D-pad' : 'A D or arrows'}</dd>
       <dt>Jump</dt>
-      <dd>{pad ? 'A — twice in the air' : 'Space — twice in the air'}</dd>
-      <dt>Dash</dt>
+      <dd>{pad ? 'A — twice, the second is a wingbeat' : 'Space — twice, the second is a wingbeat'}</dd>
+      <dt>Flare</dt>
       <dd>{pad ? 'X or a trigger' : 'Shift'}</dd>
+      <dt>Kindle</dt>
+      <dd>Walk into a wick-stone</dd>
       <dt>Pause</dt>
       <dd>{pad ? 'Start' : 'Esc'}</dd>
     </dl>
