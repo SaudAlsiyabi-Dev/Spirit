@@ -41,13 +41,27 @@ PLAN = {
     # where the slab stops being a slab — tile those and you get a row of bumps
     # instead of a ledge.
     "ledge-top":    (True,  (0.17, 0.92, 0.10, 0.90), 512),
-    "spirit-idle":  (True,  None,         384),
-    "spirit-run":   (True,  None,         384),
-    "spirit-jump":  (True,  None,         384),
-    "mote":         (True,  None,         192),
-    "thorn":        (True,  None,         384),
-    "goal":         (True,  None,         640),
+    # The pooled dark that replaced the thorns. Painted along the bottom of a
+    # landscape frame, so only that strip is wanted.
+    "gloom":        (True,  (0.58, 1.00), 512),
+    "wick-idle":    (True,  None,         384),
+    "wick-run":     (True,  None,         384),
+    "wick-leap":    (True,  None,         384),
+    "ember":        (True,  None,         192),
+    "wick-stone-dark": (True, None,       384),
+    "wick-stone-lit":  (True, None,       384),
 }
+
+# Cropped to their content. Everything else keeps the frame it was painted in.
+#
+# A character pose must NOT be in here. The game draws a sprite at a fixed
+# height, so cropping each pose to its own content makes the creature's size
+# depend on how much of its frame that pose happened to fill — a short wide
+# running pose gets blown up to match a tall narrow standing one, and the
+# character changes size the moment it starts moving. The empty margin around a
+# pose is load-bearing: it is what holds the poses to a common scale and a
+# common ground line.
+TRIM = {"ember"}
 
 
 def key_magenta(img, cutoff=50):
@@ -199,7 +213,7 @@ def main():
 
         if needs_key:
             img = key_magenta(img)
-            if band is None and name.startswith(("spirit", "mote", "thorn", "goal")):
+            if name in TRIM:
                 img = trim(img)
 
         if img.width != width:
