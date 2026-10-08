@@ -42,8 +42,11 @@ export type Biome = {
   far: string | null
   mid: string | null
   near: string | null
-  ledgeTop: string
-  ledgeBody: string
+  ledgeTop: string | null
+  ledgeBody: string | null
+  /** The light this place is lit by, as "r, g, b" — used wherever the
+   *  renderer has to draw its own glow rather than show a painting. */
+  lip: string
 }
 
 export const BIOMES: Biome[] = [
@@ -55,17 +58,57 @@ export const BIOMES: Biome[] = [
     near: 'fronds-near',
     ledgeTop: 'ledge-top',
     ledgeBody: 'ledge-body',
+    lip: '120, 255, 205',
   },
   {
     name: 'The Drowned Steps',
     sky: 'drowned-sky',
     far: 'drowned-far',
-    mid: null,
+    mid: 'drowned-mid',
     near: 'drowned-near',
-    ledgeTop: 'ledge-top',
-    ledgeBody: 'ledge-body',
+    ledgeTop: 'drowned-top',
+    ledgeBody: 'drowned-body',
+    lip: '150, 225, 235',
+  },
+  {
+    name: 'The Ashen Reach',
+    sky: 'ash-sky',
+    far: 'ash-far',
+    mid: 'ash-mid',
+    near: 'ash-near',
+    // Nothing painted for the lip here yet, so it falls back to a glow in the
+    // colour of the place rather than the forest's green.
+    ledgeTop: null,
+    ledgeBody: 'ash-body',
+    lip: '255, 150, 70',
+  },
+  {
+    name: 'The Undergrove',
+    sky: 'under-sky',
+    far: 'under-far',
+    mid: 'under-mid',
+    near: 'under-near',
+    ledgeTop: 'under-top',
+    ledgeBody: 'under-body',
+    lip: '255, 215, 110',
   },
 ]
+
+/*
+ * The Glasswood has its ledges and its middle distance but no sky, far or near
+ * band yet, and a place with three of its six paintings missing looks unmade
+ * rather than sparse. It stays out of the rotation until the rest of it exists.
+ */
+export const GLASSWOOD: Biome = {
+  name: 'The Glasswood',
+  sky: null,
+  far: null,
+  mid: 'glass-mid',
+  near: null,
+  ledgeTop: 'glass-top',
+  ledgeBody: 'glass-body',
+  lip: '190, 220, 255',
+}
 
 export type Level = {
   biome: Biome

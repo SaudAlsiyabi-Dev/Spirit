@@ -49,6 +49,11 @@ const VIEW = 26
 const TRAIL = 110
 const SPARKS = 150
 
+/** Sixty simulation steps a second, on every machine. */
+const STEP = 1 / 60
+/** The most time a single frame may pay back, so a stall cannot cascade. */
+const MAX_CATCH_UP = 0.25
+
 export type Outcome = { won: boolean; embers: number; lit: number; reach: number; score: number }
 
 type Particle = { x: number; y: number; vx: number; vy: number; life: number; max: number; hue: number }
@@ -160,6 +165,7 @@ export default function Game({
     let stopped = false
     let frame = 0
     let last = 0
+    let banked = 0
 
     const level: Level = generateLevel(seed)
     const scenery = makeScenery(seed, level.length)
@@ -548,9 +554,10 @@ export default function Game({
           ctx!.restore()
         } else {
           const grad = ctx!.createLinearGradient(0, y - tile * 0.18, 0, y + tile * 0.5)
-          grad.addColorStop(0, 'rgba(120, 255, 205, 0.85)')
-          grad.addColorStop(0.35, 'rgba(46, 160, 140, 0.5)')
-          grad.addColorStop(1, 'rgba(10, 40, 45, 0)')
+          const lit = level.biome.lip
+          grad.addColorStop(0, `rgba(${lit}, 0.6)`)
+          grad.addColorStop(0.35, `rgba(${lit}, 0.26)`)
+          grad.addColorStop(1, `rgba(${lit}, 0)`)
           ctx!.fillStyle = grad
           ctx!.fillRect(x, y - tile * 0.18, lw, tile * 0.7)
         }
@@ -587,8 +594,9 @@ export default function Game({
         const img = art('ember')
         glow(ctx!, x, y, tile * 1.1, '255, 186, 90', 0.5)
         if (painted(img)) {
-          const s = tile * 0.7
-          ctx!.drawImage(img, x - s / 2, y - s / 2, s, s)
+          const eh = tile * 0.8
+          const ew = eh * (img.naturalWidth / img.naturalHeight)
+          ctx!.drawImage(img, x - ew / 2, y - eh / 2, ew, eh)
         } else {
           ctx!.fillStyle = '#ffd089'
           ctx!.beginPath()
@@ -691,7 +699,7 @@ export default function Game({
         glow(ctx!, x, y, tile * 2.4, '160, 255, 230', 0.45)
 
         const moving = Math.abs(vx) > 1.5
-        const pose = art(!grounded ? 'spirit-jump' : moving ? 'spirit-run' : 'spirit-idle')
+        const pose = art(!grounded ? 'wick-leap' : moving ? 'wick-run' : 'wick-idle')
         if (painted(pose)) {
           const ph = tile * 1.5 * (1 + stretch)
           const pw = ph * (pose.naturalWidth / pose.naturalHeight) * (1 - stretch)
@@ -731,15 +739,40 @@ export default function Game({
       ctx!.fillRect(0, 0, w, h)
     }
 
+    /*
+     * Locked to sixty steps a second, and drawn once per step.
+     *
+     * The loop used to advance by however long the last frame took, which
+     * quietly made the game a different game on different hardware: on a 144Hz
+     * monitor it ran the physics 144 times a second in smaller slices, and
+     * floating-point error, the jump-cut and the dash timers all landed
+     * differently than they did at 60. A fixed step removes the question — the
+     * same input produces the same run on any machine, which also leaves the
+     * door open to two people running the same seed.
+     *
+     * Drawing only when a step has happened is what caps the frame rate: on a
+     * faster display the extra callbacks bank time and return without
+     * rendering, instead of burning a GPU on frames showing the same thing.
+     */
     function loop(now: number) {
       if (stopped) return
-      const dt = Math.min(0.033, last ? (now - last) / 1000 : 0)
-      last = now
-      // Paused still draws, so the scene sits behind the menu rather than
-      // freezing to black, but nothing moves on.
-      if (!pausedRef.current) step(dt)
-      draw(now)
       frame = requestAnimationFrame(loop)
+
+      const elapsed = last ? (now - last) / 1000 : 0
+      last = now
+      // Capped, so a long stall (an alt-tab, a slow first frame) is dropped
+      // rather than paid back as a burst of catch-up steps.
+      banked = Math.min(banked + elapsed, MAX_CATCH_UP)
+
+      let stepped = false
+      while (banked >= STEP) {
+        // Paused still ticks the clock and still draws, so the scene sits
+        // behind the menu rather than freezing to black; it just does not move.
+        if (!pausedRef.current) step(STEP)
+        banked -= STEP
+        stepped = true
+      }
+      if (stepped) draw(now)
     }
 
     const unlisten = listen()

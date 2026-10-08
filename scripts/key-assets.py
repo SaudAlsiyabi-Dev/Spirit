@@ -32,44 +32,135 @@ OUT = os.path.join(HERE, "public", "game")
 # name -> (key the background out?, crop as (top, bottom) or (top, bottom, left, right)
 #          in 0..1, final width)
 PLAN = {
-    "sky":          (False, None,         2560),
-    "hills-far":    (True,  None,         2560),
-    "forest-mid":   (True,  None,         2560),
-    "fronds-near":  (True,  None,         2560),
-    # Biome 2, the Drowned Steps. A biome brings its own bands; any it does not
-    # have falls back to the shapes the game draws for itself.
-    "drowned-sky":  (False, None,         2560),
-    "drowned-far":  (True,  None,         2560),
-    "drowned-near": (True,  None,         2560),
-    "ledge-body":   (False, None,         1024),
-    # Generated as a whole slab sitting in the middle of the frame: moss along
-    # the top, rock under it, vines trailing off the underside. The vertical
-    # crop keeps all three and drops the empty sky and the dead space below the
-    # longest vine. The horizontal crop throws away the rounded ends, which are
-    # where the slab stops being a slab — tile those and you get a row of bumps
-    # instead of a ledge.
-    "ledge-top":    (True,  (0.17, 0.92, 0.10, 0.90), 1024),
-    # The pooled dark that replaced the thorns. Painted along the bottom of a
-    # landscape frame, so only that strip is wanted.
-    "gloom":        (True,  (0.58, 1.00), 1024),
-    "wick-idle":    (True,  None,         768),
-    "wick-run":     (True,  None,         768),
-    "wick-leap":    (True,  None,         768),
-    "ember":        (True,  None,         384),
-    "wick-stone-dark": (True, None,       768),
-    "wick-stone-lit":  (True, None,       768),
+    # ---- The Hollow, a bioluminescent night forest -----------------------
+    "sky":              (False, None,                     2560),
+    "hills-far":        (True,  None,                     2560),
+    "forest-mid":       (True,  None,                     2560),
+    "fronds-near":      (True,  None,                     2560),
+    "ledge-top":        (True,  (0.17, 0.92, 0.10, 0.90), 1024),
+    "ledge-body":       (False, None,                     1024),
+
+    # ---- The Drowned Steps, a flooded ruin -------------------------------
+    "drowned-sky":      (False, None,                     2560),
+    "drowned-far":      (True,  None,                     2560),
+    "drowned-mid":      (True,  None,                     2560),
+    "drowned-near":     (True,  None,                     2560),
+    "drowned-top":      (True,  (0.12, 0.62, 0.06, 0.94), 1024),
+    "drowned-body":     (False, None,                     1024),
+
+    # ---- The Ashen Reach, a forest that burned ---------------------------
+    "ash-sky":          (False, None,                     2560),
+    "ash-far":          (True,  None,                     2560),
+    "ash-mid":          (True,  None,                     2560),
+    "ash-near":         (True,  None,                     2560),
+    "ash-body":         (False, None,                     1024),
+
+    # ---- The Glasswood, a forest turned to crystal -----------------------
+    "glass-mid":        (True,  None,                     2560),
+    "glass-top":        (True,  (0.22, 0.88, 0.06, 0.94), 1024),
+    "glass-body":       (False, None,                     1024),
+
+    # ---- The Undergrove, a cavern lit by what grows in it ----------------
+    "under-sky":        (False, None,                     2560),
+    "under-far":        (True,  None,                     2560),
+    "under-mid":        (True,  None,                     2560),
+    "under-near":       (True,  None,                     2560),
+    "under-top":        (True,  (0.22, 0.90, 0.06, 0.94), 1024),
+    "under-body":       (False, None,                     1024),
+
+    # ---- The Wick, and what the world does to it -------------------------
+    "wick-idle":        (True,  None,                     768),
+    "wick-run":         (True,  None,                     768),
+    "wick-leap":        (True,  None,                     768),
+    "ember":            (True,  None,                     384),
+    "gloom":            (True,  (0.42, 1.00),             1024),
+    "wick-stone-dark":  (True,  None,                     768),
+    "wick-stone-lit":   (True,  None,                     768),
 }
 
-# Cropped to their content. Everything else keeps the frame it was painted in.
+# What each slot is actually called in the folder the art arrived in.
 #
-# A character pose must NOT be in here. The game draws a sprite at a fixed
-# height, so cropping each pose to its own content makes the creature's size
-# depend on how much of its frame that pose happened to fill — a short wide
-# running pose gets blown up to match a tall narrow standing one, and the
-# character changes size the moment it starts moving. The empty margin around a
-# pose is load-bearing: it is what holds the poses to a common scale and a
-# common ground line.
+# The generator names its own files, and renaming fifty of them by hand is both
+# dull and a place to make a silent mistake. Mapping them here instead keeps the
+# original folder exactly as it was delivered, so it stays obvious which
+# painting is which when one needs regenerating.
+ALIASES = {
+    "forest-mid":      "ChatGPT Image Oct 8, 2026, 12_45_36 PM",
+    "fronds-near":     "Enchanted Bioluminescent Forest Clearing",
+    "ledge-top":       "Bioluminescent Mossy Cliff Ledge",
+    "ledge-body":      "Mossy Moonlit Stone Wall",
+
+    "drowned-sky":     "Misty Ruins Beneath Stormlight",
+    "drowned-far":     "Ruined Arches Over Neon Waters",
+    "drowned-mid":     "Floating Ruins in a Magenta Sky",
+    "drowned-near":    "Ruined Ivy Gate on Magenta Ground",
+    "drowned-top":     "Moss-Covered Ruined Stone Platform",
+    "drowned-body":    "Wet Mossy Ruined Stone Wall Texture",
+
+    "ash-sky":         "Ashstorm Over Ruined Volcanic Realms",
+    "ash-far":         "Charred Ruins Against Magenta Skies",
+    "ash-mid":         "Charred Ruins Framing Magenta Space",
+    "ash-near":        "Charred Wasteland Framing Magenta Void",
+    "ash-body":        "Charred Volcanic Wood with Molten Fissures",
+
+    "glass-mid":       "Magenta Sky Crystal Ruins",
+    "glass-top":       "Magenta-Backdrop Ancient Crystal Platform",
+    "glass-body":      "Glowing Crystal Cliff with Vines",
+
+    "under-sky":       "Bioluminescent Mushroom Cavern Ceiling",
+    "under-far":       "Bioluminescent Mushroom Cavern Valley",
+    "under-mid":       "Bioluminescent Mushroom Forest on Magenta",
+    "under-near":      "Enchanted Mushroom Cave Border",
+    "under-top":       "Bioluminescent Mushroom Forest Ledge",
+    "under-body":      "Bioluminescent Fungal Rootwall Texture",
+
+    "wick-idle":       "Glowing Steampunk Lantern Moth",
+    "wick-run":        "Steampunk Lantern Moth in Motion",
+    "wick-leap":       "Steampunk Moth Lantern in Flight",
+    "ember":           "Golden Flame Spirit on Magenta",
+    "gloom":           "Shadow Slime Smoke Hazard",
+    "wick-stone-dark": "Moss-Covered Fantasy Stone Shrine",
+    "wick-stone-lit":  "Enchanted Flame Stone Altar",
+}
+
 TRIM = {"ember"}
+
+# Poses of the one creature, held to a common size and a common ground line.
+POSES = {"wick-idle", "wick-run", "wick-leap"}
+# The fraction of the frame the creature fills, and where its feet sit.
+POSE_HEIGHT = 0.68
+POSE_BASE = 0.88
+
+
+def normalise_pose(img):
+    """
+    Puts a pose at the same scale and the same ground line as its siblings.
+
+    The game draws a sprite at a fixed height, so the creature's size on screen
+    is decided by how much of its own frame that pose happens to fill. Three
+    poses framed by eye came back filling 0.64, 0.67 and 0.71 of their frames,
+    which is an eleven percent jump in the creature's size every time it starts
+    running. Rescaling each one so the body is the same fraction of the frame,
+    and sliding it so the feet land on one line, is the difference between a
+    character that moves and a character that also inflates.
+    """
+    alpha = np.asarray(img)[..., 3]
+    rows = np.where(alpha.max(axis=1) > 40)[0]
+    cols = np.where(alpha.max(axis=0) > 40)[0]
+    if not len(rows) or not len(cols):
+        return img
+
+    top, bottom = int(rows[0]), int(rows[-1])
+    left, right = int(cols[0]), int(cols[-1])
+    body = img.crop((left, top, right + 1, bottom + 1))
+
+    scale = (POSE_HEIGHT * img.height) / body.height
+    body = resize_rgba(body, max(1, round(body.width * scale)))
+
+    out = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    out.paste(body, (round((img.width - body.width) / 2),
+                     round(POSE_BASE * img.height - body.height)))
+    return out
 
 
 def key_magenta(img, cutoff=50):
@@ -201,10 +292,13 @@ def main():
     done, missing = [], []
     for name, (needs_key, band, width) in PLAN.items():
         src = None
-        for ext in (".png", ".jpg", ".jpeg", ".webp"):
-            candidate = os.path.join(RAW, name + ext)
-            if os.path.exists(candidate):
-                src = candidate
+        for stem in (name, ALIASES.get(name, name)):
+            for ext in (".png", ".jpg", ".jpeg", ".webp"):
+                candidate = os.path.join(RAW, stem + ext)
+                if os.path.exists(candidate):
+                    src = candidate
+                    break
+            if src:
                 break
         if not src:
             missing.append(name)
@@ -223,6 +317,8 @@ def main():
             img = key_magenta(img)
             if name in TRIM:
                 img = trim(img)
+            if name in POSES:
+                img = normalise_pose(img)
 
         if img.width > width:
             img = resize_rgba(img, width)
