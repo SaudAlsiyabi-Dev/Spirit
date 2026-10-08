@@ -212,6 +212,10 @@ export default function Game({
       const dpr = Math.min(window.devicePixelRatio || 1, 2)
       el!.width = Math.max(1, Math.round(el!.clientWidth * dpr))
       el!.height = Math.max(1, Math.round(el!.clientHeight * dpr))
+      // Resizing a canvas resets its state, smoothing included. The painted
+      // layers are drawn larger than they were painted on most screens, and the
+      // browser's default filter is the cheap one that turns them soft.
+      ctx!.imageSmoothingQuality = 'high'
     }
 
     function burst(x: number, y: number, n: number, hue: number, speed: number, life: number) {
