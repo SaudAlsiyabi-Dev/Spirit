@@ -2,7 +2,7 @@
 Turns the generated art in public/game/ into what the game can use.
 
     pip install pillow
-    python3 scripts/key-assets.py
+    python3 scripts/key-assets.py [folder of raw art]
 
 ChatGPT will not reliably give you a real alpha channel, so the sprites are
 generated on flat magenta and keyed out here. It also only produces three
@@ -23,7 +23,10 @@ except ImportError:
     sys.exit("Missing a dependency. Run: pip install pillow numpy")
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-RAW = os.path.join(HERE, "public", "game", "raw")
+# Reads from public/game/raw by default, or from a folder given on the command
+# line — so a batch of newly generated art can be pointed at where it landed
+# rather than copied in first.
+RAW = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "public", "game", "raw")
 OUT = os.path.join(HERE, "public", "game")
 
 # name -> (key the background out?, crop as (top, bottom) or (top, bottom, left, right)
