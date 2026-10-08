@@ -29,27 +29,32 @@ OUT = os.path.join(HERE, "public", "game")
 # name -> (key the background out?, crop as (top, bottom) or (top, bottom, left, right)
 #          in 0..1, final width)
 PLAN = {
-    "sky":          (False, None,         1536),
-    "hills-far":    (True,  None,         1536),
-    "forest-mid":   (True,  None,         1536),
-    "fronds-near":  (True,  None,         1536),
-    "ledge-body":   (False, None,         512),
+    "sky":          (False, None,         2560),
+    "hills-far":    (True,  None,         2560),
+    "forest-mid":   (True,  None,         2560),
+    "fronds-near":  (True,  None,         2560),
+    # Biome 2, the Drowned Steps. A biome brings its own bands; any it does not
+    # have falls back to the shapes the game draws for itself.
+    "drowned-sky":  (False, None,         2560),
+    "drowned-far":  (True,  None,         2560),
+    "drowned-near": (True,  None,         2560),
+    "ledge-body":   (False, None,         1024),
     # Generated as a whole slab sitting in the middle of the frame: moss along
     # the top, rock under it, vines trailing off the underside. The vertical
     # crop keeps all three and drops the empty sky and the dead space below the
     # longest vine. The horizontal crop throws away the rounded ends, which are
     # where the slab stops being a slab — tile those and you get a row of bumps
     # instead of a ledge.
-    "ledge-top":    (True,  (0.17, 0.92, 0.10, 0.90), 512),
+    "ledge-top":    (True,  (0.17, 0.92, 0.10, 0.90), 1024),
     # The pooled dark that replaced the thorns. Painted along the bottom of a
     # landscape frame, so only that strip is wanted.
-    "gloom":        (True,  (0.58, 1.00), 512),
-    "wick-idle":    (True,  None,         384),
-    "wick-run":     (True,  None,         384),
-    "wick-leap":    (True,  None,         384),
-    "ember":        (True,  None,         192),
-    "wick-stone-dark": (True, None,       384),
-    "wick-stone-lit":  (True, None,       384),
+    "gloom":        (True,  (0.58, 1.00), 1024),
+    "wick-idle":    (True,  None,         768),
+    "wick-run":     (True,  None,         768),
+    "wick-leap":    (True,  None,         768),
+    "ember":        (True,  None,         384),
+    "wick-stone-dark": (True, None,       768),
+    "wick-stone-lit":  (True, None,       768),
 }
 
 # Cropped to their content. Everything else keeps the frame it was painted in.
@@ -216,18 +221,20 @@ def main():
             if name in TRIM:
                 img = trim(img)
 
-        if img.width != width:
+        if img.width > width:
             img = resize_rgba(img, width)
         if needs_key:
             img = despill_edge(img)
             img = pad_edges(img)
 
         # WebP rather than PNG: these are painted images, and PNG stores them
-        # losslessly at seven times the size for no visible gain. The alpha is
+        # losslessly at several times the size for no visible gain. The alpha is
         # kept lossless even so, because that is the one channel where an
-        # artefact shows up as a halo rather than as noise.
+        # artefact shows up as a halo rather than as noise. Quality is high
+        # because this is a desktop game shipped as one download, not a page
+        # someone waits for.
         out = os.path.join(OUT, name + ".webp")
-        img.save(out, "WEBP", quality=84, method=6, alpha_quality=100)
+        img.save(out, "WEBP", quality=92, method=6, alpha_quality=100)
         done.append(f"  {name:12} -> {img.width}x{img.height}  {os.path.getsize(out) // 1024} kB")
 
     if done:

@@ -67,6 +67,13 @@ function art(name: string): HTMLImageElement {
 
 const painted = (img: HTMLImageElement) => img.complete && img.naturalWidth > 0
 
+/** A biome's painting for one slot, or null where that biome has none yet. */
+function band_(name: string | null): HTMLImageElement | null {
+  if (!name) return null
+  const img = art(name)
+  return painted(img) ? img : null
+}
+
 /**
  * The sky, covering the screen once and never repeating.
  *
@@ -434,8 +441,8 @@ export default function Game({
       const ox = w / 2 - camera.x * tile + (Math.random() - 0.5) * quake
       const oy = h * 0.56 - camera.y * tile + (Math.random() - 0.5) * quake
 
-      const skyArt = art('sky')
-      if (painted(skyArt)) {
+      const skyArt = band_(level.biome.sky)
+      if (skyArt) {
         cover(ctx!, skyArt, camera.x * tile * 0.06, w, h)
       } else {
         const sky = ctx!.createLinearGradient(0, 0, 0, h)
@@ -446,17 +453,26 @@ export default function Game({
         ctx!.fillRect(0, 0, w, h)
       }
 
-      const farArt = art('hills-far')
-      if (painted(farArt)) {
+      /*
+       * A slot a biome does not have is left empty; a slot it has but whose
+       * painting has not arrived falls back to shapes drawn in code.
+       *
+       * The two are not the same thing, and treating them the same put the
+       * night forest's procedural trees into a drowned ruin — black conifers
+       * hanging in the sky over the water. Only a biome that names a layer
+       * gets the stand-in for it.
+       */
+      const farArt = band_(level.biome.far)
+      if (farArt) {
         band(ctx!, farArt, camera.x * tile * 0.16, h * 0.92 + camera.y * tile * 0.04, h * 0.72, w)
-      } else {
+      } else if (level.biome.far) {
         hills(ctx!, scenery.far, camera.x, tile, w, h, 0.16, '#102236', oy)
       }
 
-      const midArt = art('forest-mid')
-      if (painted(midArt)) {
+      const midArt = band_(level.biome.mid)
+      if (midArt) {
         band(ctx!, midArt, camera.x * tile * 0.34, h * 1.06 + camera.y * tile * 0.08, h * 1.45, w)
-      } else {
+      } else if (level.biome.mid) {
         hills(ctx!, scenery.near, camera.x, tile, w, h, 0.34, '#0c1b2b', oy)
         trees(ctx!, scenery.trees, ox, oy, tile, w, 0.62, 'rgba(8, 20, 28, 0.95)')
       }
@@ -470,8 +486,8 @@ export default function Game({
         const y = oy + ledge.y * tile
         const lw = ledge.w * tile
 
-        const body = art('ledge-body')
-        if (painted(body)) {
+        const body = band_(level.biome.ledgeBody)
+        if (body) {
           const size = tile * 2
           ctx!.save()
           ctx!.beginPath()
@@ -498,8 +514,8 @@ export default function Game({
           ctx!.fillRect(x, y, lw, h)
         }
 
-        const lip = art('ledge-top')
-        if (painted(lip)) {
+        const lip = band_(level.biome.ledgeTop)
+        if (lip) {
           /*
            * The lip is a whole slab edge — moss on top, rock beneath it, vines
            * trailing off the underside — not a thin strip, so it hangs well
@@ -633,7 +649,7 @@ export default function Game({
         const edge = Math.max(0, frontier - tile * 7)
         const veil = ctx!.createLinearGradient(edge, 0, frontier + tile * 11, 0)
         veil.addColorStop(0, 'rgba(2, 5, 12, 0)')
-        veil.addColorStop(1, 'rgba(2, 5, 12, 0.82)')
+        veil.addColorStop(1, 'rgba(2, 5, 12, 0.66)')
         ctx!.fillStyle = veil
         ctx!.fillRect(edge, 0, w - edge, h)
       }
@@ -647,7 +663,7 @@ export default function Game({
         const r = tile * (5 + fuel * 30)
         const close = ctx!.createRadialGradient(cx, cy, r * 0.3, cx, cy, r)
         close.addColorStop(0, 'rgba(1, 3, 9, 0)')
-        close.addColorStop(1, `rgba(1, 3, 9, ${(0.9 - fuel * 0.55).toFixed(3)})`)
+        close.addColorStop(1, `rgba(1, 3, 9, ${(0.78 - fuel * 0.5).toFixed(3)})`)
         ctx!.fillStyle = close
         ctx!.fillRect(0, 0, w, h)
       }
@@ -694,8 +710,8 @@ export default function Game({
         }
       }
 
-      const frondArt = art('fronds-near')
-      if (painted(frondArt)) {
+      const frondArt = band_(level.biome.near)
+      if (frondArt) {
         ctx!.save()
         ctx!.globalAlpha = 0.92
         band(ctx!, frondArt, camera.x * tile * 1.5, h * 1.06, h * 0.4, w)

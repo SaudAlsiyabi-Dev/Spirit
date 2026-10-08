@@ -28,7 +28,47 @@ export type Gloom = { x: number; y: number; w: number }
 /** A standing lantern. Dead until kindled; the last one ends the level. */
 export type Wick = { id: number; x: number; y: number; lit: boolean }
 
+/**
+ * A place, and the paintings that make it.
+ *
+ * A biome names its own four background bands and its own ledges. Any slot it
+ * leaves out falls through to the shapes the renderer draws for itself, so a
+ * place can be played as soon as one of its paintings exists rather than only
+ * once all six do.
+ */
+export type Biome = {
+  name: string
+  sky: string | null
+  far: string | null
+  mid: string | null
+  near: string | null
+  ledgeTop: string
+  ledgeBody: string
+}
+
+export const BIOMES: Biome[] = [
+  {
+    name: 'The Hollow',
+    sky: 'sky',
+    far: 'hills-far',
+    mid: 'forest-mid',
+    near: 'fronds-near',
+    ledgeTop: 'ledge-top',
+    ledgeBody: 'ledge-body',
+  },
+  {
+    name: 'The Drowned Steps',
+    sky: 'drowned-sky',
+    far: 'drowned-far',
+    mid: null,
+    near: 'drowned-near',
+    ledgeTop: 'ledge-top',
+    ledgeBody: 'ledge-body',
+  },
+]
+
 export type Level = {
+  biome: Biome
   /** How far the level runs, in tiles. */
   length: number
   ledges: Ledge[]
@@ -212,6 +252,7 @@ export function generateLevel(seed: number, length = 230): Level {
   }
 
   return {
+    biome: BIOMES[Math.floor(random() * BIOMES.length)],
     length: x,
     ledges,
     embers,
